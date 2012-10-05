@@ -1,6 +1,0 @@
-CC=g++ 
-CFLAGS=-Wall
-webcam: webcam.o
-
-clean:
-	rm -f webcam
