@@ -8,6 +8,8 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include "SDL/SDL.h"
+#include "SDL/SDL_image.h"
 
 static const char * deviceName = "/dev/video0";
 
