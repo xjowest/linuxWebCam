@@ -3,8 +3,13 @@
 int main(void)
 {
   int hCam = -1;
-  struct ImageSize size;
-  //struct v4l2_queryctrl ctrl;
+  struct v4l2_requestbuffers reqbuf;
+  struct v4l2_buffer buf;
+  struct v4l2_input input;
+
+  memset(&input, 0, sizeof(input));
+  memset(&reqbuf, 0, sizeof(reqbuf));
+  memset(&buf, 0, sizeof(buf));  
 
   if(!initCam(&hCam)){
     printf("Could not open device\n");
@@ -15,8 +20,15 @@ int main(void)
     printf("Device doesn't have video capture capabilities\n");
     return -1;
   }
- 
-  size = getImageSize(hCam);
+  
+  reqbuf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+  reqbuf.memory = V4L2_MEMORY_MMAP;
+  reqbuf.count = 20;
+
+  if(ioctl(hCam, VIDIOC_REQBUFS, &reqbuf) == -1)
+    printf("Error %d\n", errno);
+
+
 
   /*
     y1   = yuv[0];
@@ -58,7 +70,7 @@ bool hasVideoCaptureCapability(int hCam)
   struct v4l2_capability camCap;
   memset(&camCap, 0, sizeof(camCap));
   ioctl(hCam, VIDIOC_QUERYCAP, &camCap);
-  return camCap.capabilities & V4L2_CAP_VIDEO_CAPTURE ? true : false;
+  return camCap.capabilities & (V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING) ? true : false;
 }
  
 struct ImageSize getImageSize(int hCam)
@@ -68,7 +80,8 @@ struct ImageSize getImageSize(int hCam)
   
   format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
-  ioctl(hCam, VIDIOC_G_FMT, &format);  
+  ioctl(hCam, VIDIOC_G_FMT, &format);
+  ioctl(hCam, VIDIOC_S_FMT, &format);
   
   imageSize.width = format.fmt.pix.width;
   imageSize.height = format.fmt.pix.height;

@@ -11,6 +11,9 @@
 #include "SDL/SDL.h"
 #include "SDL/SDL_image.h"
 
+#define RGB_FRAME_SIZE 640*480*3
+#define YUV_FRAME_SIZE 640*480*2
+
 static const char * deviceName = "/dev/video0";
 
 typedef unsigned int u32;
