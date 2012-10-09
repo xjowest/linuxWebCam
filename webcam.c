@@ -3,13 +3,16 @@
 int main(void)
 {
   int hCam = -1;
+  int i;
   struct v4l2_requestbuffers reqbuf;
-  struct v4l2_buffer buf;
   struct v4l2_input input;
+  struct{
+    void *start;
+    size_t length;
+  }*buffers;
 
   memset(&input, 0, sizeof(input));
   memset(&reqbuf, 0, sizeof(reqbuf));
-  memset(&buf, 0, sizeof(buf));  
 
   if(!initCam(&hCam)){
     printf("Could not open device\n");
@@ -23,19 +26,35 @@ int main(void)
   
   reqbuf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
   reqbuf.memory = V4L2_MEMORY_MMAP;
-  reqbuf.count = 20;
+  reqbuf.count = 5;
 
   if(ioctl(hCam, VIDIOC_REQBUFS, &reqbuf) == -1)
     printf("Error %d\n", errno);
 
-  buf.type = reqbuf.type;
-  buf.memory = reqbuf.memory;
+  buffers = calloc(reqbuf.count, sizeof(*buffers));
 
-  if(ioctl(hCam, VIDIOC_QUERYBUF, &buf) == -1)
-    printf("Error %d\n", errno);
+  for(i=0;i<reqbuf.count;i++){
+    struct v4l2_buffer buf;
+    memset(&buf, 0, sizeof(buf));  
+    buf.type = reqbuf.type;
+    buf.memory = reqbuf.memory;
+    buf.index = i;
 
-  printf("%u\n", buf.length);
+    if(ioctl(hCam, VIDIOC_QUERYBUF, &buf) == -1)
+      printf("Error %d\n", errno);
 
+    buffers[i].length = buf.length;
+    buffers[i].start = mmap(NULL,
+			    buf.length,
+			    PROT_READ | PROT_WRITE,
+			    MAP_SHARED,
+			    hCam,
+			    buf.m.offset);
+
+    if(buffers[i].start == MAP_FAILED)
+      printf("Error %u\n", errno);
+  }
+  
   /*
     y1   = yuv[0];
     u    = yuv[1];
@@ -45,7 +64,10 @@ int main(void)
     rgb1 = YUV444toRGB(y1, u, v);
     rgb2 = YUV444toRGB(y2, u, v);
   */
-  
+ 
+  for(i=0;i<reqbuf.count;i++)
+    munmap(buffers[i].start, buffers[i].length);
+ 
   if(!disposeCam(hCam)){
     printf("Could not close device\n");
     return -1;
