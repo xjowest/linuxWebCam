@@ -28,7 +28,13 @@ int main(void)
   if(ioctl(hCam, VIDIOC_REQBUFS, &reqbuf) == -1)
     printf("Error %d\n", errno);
 
+  buf.type = reqbuf.type;
+  buf.memory = reqbuf.memory;
 
+  if(ioctl(hCam, VIDIOC_QUERYBUF, &buf) == -1)
+    printf("Error %d\n", errno);
+
+  printf("%u\n", buf.length);
 
   /*
     y1   = yuv[0];
