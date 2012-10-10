@@ -5,14 +5,13 @@ int main(void)
   int hCam = -1;
   int i;
   struct v4l2_requestbuffers reqbuf;
-  struct v4l2_input input;
+ 
   struct{
     void *start;
     size_t length;
   }*buffers;
 
-  memset(&input, 0, sizeof(input));
-  memset(&reqbuf, 0, sizeof(reqbuf));
+   memset(&reqbuf, 0, sizeof(reqbuf));
 
   if(!initCam(&hCam)){
     printf("Could not open device\n");
