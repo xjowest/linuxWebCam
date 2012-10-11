@@ -5,13 +5,16 @@ int main(void)
   int hCam = -1;
   int i;
   struct v4l2_requestbuffers reqbuf;
- 
+  struct v4l2_buffer buf; 
+  enum v4l2_buf_type buf_type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+  struct RGB rgb_buf[1];
+
   struct{
     void *start;
     size_t length;
   }*buffers;
 
-   memset(&reqbuf, 0, sizeof(reqbuf));
+  memset(&reqbuf, 0, sizeof(reqbuf));
 
   if(!initCam(&hCam)){
     printf("Could not open device\n");
@@ -28,19 +31,18 @@ int main(void)
   reqbuf.count = 5;
 
   if(ioctl(hCam, VIDIOC_REQBUFS, &reqbuf) == -1)
-    printf("Error %d\n", errno);
+    printf("Error reqbuf %d\n", errno);
 
   buffers = calloc(reqbuf.count, sizeof(*buffers));
 
   for(i=0;i<reqbuf.count;i++){
-    struct v4l2_buffer buf;
     memset(&buf, 0, sizeof(buf));  
     buf.type = reqbuf.type;
     buf.memory = reqbuf.memory;
     buf.index = i;
 
     if(ioctl(hCam, VIDIOC_QUERYBUF, &buf) == -1)
-      printf("Error %d\n", errno);
+      printf("Error querybuf %d\n", errno);
 
     buffers[i].length = buf.length;
     buffers[i].start = mmap(NULL,
@@ -51,8 +53,38 @@ int main(void)
 			    buf.m.offset);
 
     if(buffers[i].start == MAP_FAILED)
-      printf("Error %u\n", errno);
+      printf("Error map %u\n", errno);
   }
+
+  for(i=0;i<reqbuf.count;i++){
+    memset(&buf, 0, sizeof(buf));
+    buf.type = reqbuf.type;
+    buf.memory = reqbuf.memory;
+    buf.index = i;
+
+    if(ioctl(hCam, VIDIOC_QBUF, &buf) == -1)
+      printf("Error qbuf %u\n", errno);
+  }
+
+  if(ioctl(hCam, VIDIOC_STREAMON, &buf_type) == -1)
+    printf("Error streamon %u\n", errno);
+
+  memset(&buf, 0, sizeof(buf));
+  buf.type = reqbuf.type;
+  buf.memory = reqbuf.memory;
+  
+  if(ioctl(hCam, VIDIOC_DQBUF, &buf) == -1)
+    printf("Error dqbuf %u\n", errno);
+
+  rgb_buf[0] = YUV444toRGB(*(u8*)buffers[0].start, 
+			   *(u8*)buffers[0].start+1,
+			   *(u8*)buffers[0].start+3);
+
+  printf("RGB[0] = %u %u %u\n", rgb_buf[0].R, rgb_buf[0].G, rgb_buf[0].B);
+
+  if(ioctl(hCam, VIDIOC_STREAMOFF, &buf_type) == -1)
+    printf("Error streamoff %u\n", errno);
+  
   
   /*
     y1   = yuv[0];
