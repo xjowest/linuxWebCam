@@ -13,6 +13,8 @@
 
 #define RGB_FRAME_SIZE 640*480*3
 #define YUV_FRAME_SIZE 640*480*2
+#define FRAME_SIZE 640*480
+#define REQ_BUF_COUNT 5
 
 static const char * deviceName = "/dev/video0";
 
@@ -40,6 +42,9 @@ struct YUV{
 bool initCam(int * hCam);
 bool disposeCam(int hCam);
 bool hasVideoCaptureCapability(int hCam);
+bool configureCamera(int hCam);
+bool fetchFrame(int hCam);
+void convertFrame2RGB(u8 * rgb_buf);
 struct ImageSize getImageSize(int hCam);
 struct RGB YUV444toRGB(u8 y, u8 u, u8 v);
 u8 clamp(int val);

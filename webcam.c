@@ -1,20 +1,16 @@
 #include "webcam.h"
 
+struct{
+  void *start;
+  size_t length;
+}*buffers;
+
 int main(void)
 {
   int hCam = -1;
   int i;
-  struct v4l2_requestbuffers reqbuf;
-  struct v4l2_buffer buf; 
   enum v4l2_buf_type buf_type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-  struct RGB rgb_buf[1];
-
-  struct{
-    void *start;
-    size_t length;
-  }*buffers;
-
-  memset(&reqbuf, 0, sizeof(reqbuf));
+  u8 rgb_buf[RGB_FRAME_SIZE];
 
   if(!initCam(&hCam)){
     printf("Could not open device\n");
@@ -25,78 +21,27 @@ int main(void)
     printf("Device doesn't have video capture capabilities\n");
     return -1;
   }
+
+  if(!configureCamera(hCam)){
+    printf("Could not configure the webcam, error %d\n", errno);
+    return -1;
+  }
   
-  reqbuf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-  reqbuf.memory = V4L2_MEMORY_MMAP;
-  reqbuf.count = 5;
-
-  if(ioctl(hCam, VIDIOC_REQBUFS, &reqbuf) == -1)
-    printf("Error reqbuf %d\n", errno);
-
-  buffers = calloc(reqbuf.count, sizeof(*buffers));
-
-  for(i=0;i<reqbuf.count;i++){
-    memset(&buf, 0, sizeof(buf));  
-    buf.type = reqbuf.type;
-    buf.memory = reqbuf.memory;
-    buf.index = i;
-
-    if(ioctl(hCam, VIDIOC_QUERYBUF, &buf) == -1)
-      printf("Error querybuf %d\n", errno);
-
-    buffers[i].length = buf.length;
-    buffers[i].start = mmap(NULL,
-			    buf.length,
-			    PROT_READ | PROT_WRITE,
-			    MAP_SHARED,
-			    hCam,
-			    buf.m.offset);
-
-    if(buffers[i].start == MAP_FAILED)
-      printf("Error map %u\n", errno);
-  }
-
-  for(i=0;i<reqbuf.count;i++){
-    memset(&buf, 0, sizeof(buf));
-    buf.type = reqbuf.type;
-    buf.memory = reqbuf.memory;
-    buf.index = i;
-
-    if(ioctl(hCam, VIDIOC_QBUF, &buf) == -1)
-      printf("Error qbuf %u\n", errno);
-  }
-
   if(ioctl(hCam, VIDIOC_STREAMON, &buf_type) == -1)
     printf("Error streamon %u\n", errno);
 
-  memset(&buf, 0, sizeof(buf));
-  buf.type = reqbuf.type;
-  buf.memory = reqbuf.memory;
-  
-  if(ioctl(hCam, VIDIOC_DQBUF, &buf) == -1)
-    printf("Error dqbuf %u\n", errno);
+  if(!fetchFrame(hCam)){
+    printf("Could not fetch frame, error %u\n", errno);
+    return -1;
+  }
 
-  rgb_buf[0] = YUV444toRGB(*(u8*)buffers[0].start, 
-			   *(u8*)buffers[0].start+1,
-			   *(u8*)buffers[0].start+3);
-
-  printf("RGB[0] = %u %u %u\n", rgb_buf[0].R, rgb_buf[0].G, rgb_buf[0].B);
+  convertFrame2RGB(rgb_buf);
 
   if(ioctl(hCam, VIDIOC_STREAMOFF, &buf_type) == -1)
     printf("Error streamoff %u\n", errno);
   
-  
-  /*
-    y1   = yuv[0];
-    u    = yuv[1];
-    y2   = yuv[2];
-    v    = yuv[3];
 
-    rgb1 = YUV444toRGB(y1, u, v);
-    rgb2 = YUV444toRGB(y2, u, v);
-  */
- 
-  for(i=0;i<reqbuf.count;i++)
+  for(i=0;i<REQ_BUF_COUNT;i++)
     munmap(buffers[i].start, buffers[i].length);
  
   if(!disposeCam(hCam)){
@@ -131,6 +76,70 @@ bool hasVideoCaptureCapability(int hCam)
   ioctl(hCam, VIDIOC_QUERYCAP, &camCap);
   return camCap.capabilities & (V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING) ? true : false;
 }
+
+bool configureCamera(int hCam)
+{
+  int i;
+  struct v4l2_requestbuffers reqbuf;
+  struct v4l2_buffer buf; 
+
+  memset(&reqbuf, 0, sizeof(reqbuf));
+
+  reqbuf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+  reqbuf.memory = V4L2_MEMORY_MMAP;
+  reqbuf.count = REQ_BUF_COUNT;
+
+  if(ioctl(hCam, VIDIOC_REQBUFS, &reqbuf) == -1)
+    return false;
+
+  buffers = calloc(reqbuf.count, sizeof(*buffers));
+
+  for(i=0;i<reqbuf.count;i++){
+    memset(&buf, 0, sizeof(buf));  
+    buf.type = reqbuf.type;
+    buf.memory = reqbuf.memory;
+    buf.index = i;
+
+    if(ioctl(hCam, VIDIOC_QUERYBUF, &buf) == -1)
+      return false;
+
+    buffers[i].length = buf.length;
+    buffers[i].start = mmap(NULL,
+			    buf.length,
+			    PROT_READ | PROT_WRITE,
+			    MAP_SHARED,
+			    hCam,
+			    buf.m.offset);
+
+    if(buffers[i].start == MAP_FAILED)
+      return false;
+  }
+
+  for(i=0;i<reqbuf.count;i++){
+    memset(&buf, 0, sizeof(buf));
+    buf.type = reqbuf.type;
+    buf.memory = reqbuf.memory;
+    buf.index = i;
+
+    if(ioctl(hCam, VIDIOC_QBUF, &buf) == -1)
+      return false;
+  }
+
+  return true;
+}
+
+bool fetchFrame(hCam)
+{
+  static struct v4l2_buffer buf;   
+  memset(&buf, 0, sizeof(buf));
+  buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+  buf.memory = V4L2_MEMORY_MMAP;
+  
+  if(ioctl(hCam, VIDIOC_DQBUF, &buf) == -1)
+    return false;
+
+  return true;
+}
  
 struct ImageSize getImageSize(int hCam)
 {
@@ -147,6 +156,44 @@ struct ImageSize getImageSize(int hCam)
         
   return imageSize;
 }
+
+void convertFrame2RGB(u8 * rgb_buf)
+{
+  int i;
+  static struct RGB rgb1;
+  static struct RGB rgb2;
+  int indexYuv;
+  int indexRgb;
+
+  for(i=0;i<FRAME_SIZE/2;i++){
+    indexYuv = i*4;
+    indexRgb = i*6;
+
+    rgb1 = YUV444toRGB(*(u8*)buffers[0].start + indexYuv,
+		       *(u8*)buffers[0].start + indexYuv + 1,
+		       *(u8*)buffers[0].start + indexYuv + 3);
+
+    rgb2 = YUV444toRGB(*(u8*)buffers[0].start + indexYuv + 2,
+		       *(u8*)buffers[0].start + indexYuv + 1,
+		       *(u8*)buffers[0].start + indexYuv + 3);
+
+    rgb_buf[indexRgb+0] = rgb1.R;
+    rgb_buf[indexRgb+1] = rgb1.G;
+    rgb_buf[indexRgb+2] = rgb1.B;
+    rgb_buf[indexRgb+3] = rgb2.R;
+    rgb_buf[indexRgb+4] = rgb2.G;
+    rgb_buf[indexRgb+5] = rgb2.B;
+  }
+}
+  /*
+    y1   = yuv[0];
+    u    = yuv[1];
+    y2   = yuv[2];
+    v    = yuv[3];
+
+    rgb1 = YUV444toRGB(y1, u, v);
+    rgb2 = YUV444toRGB(y2, u, v);
+  */
 
 struct RGB YUV444toRGB(u8 y, u8 u, u8 v)
 {
