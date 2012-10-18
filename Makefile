@@ -1,5 +1,8 @@
 CC=gcc 
-CFLAGS=-Wall -lSDL -lSDL_image -o /bin/webcam
+CFLAGS= -o webcam -lSDL
+
+all:	
+	$(CC) webcam.c $(CFLAGS)
 
 clean:
 	rm -f webcam

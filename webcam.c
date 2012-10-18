@@ -10,7 +10,10 @@ int main(void)
   int hCam = -1;
   int i;
   enum v4l2_buf_type buf_type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-  u8 rgb_buf[RGB_FRAME_SIZE];
+  u8 rgb_buf[320*240*3];
+  SDL_Surface * screen;
+  SDL_Surface * img;
+  struct ImageSize imgSize;
 
   if(!initCam(&hCam)){
     printf("Could not open device\n");
@@ -48,6 +51,25 @@ int main(void)
     printf("Could not close device\n");
     return -1;
   }
+
+  SDL_Init(SDL_INIT_VIDEO);
+  atexit(SDL_Quit);
+
+  screen = SDL_SetVideoMode(320,240,24,SDL_HWSURFACE);
+
+  img = SDL_CreateRGBSurfaceFrom(rgb_buf, 320, 240, 24, 
+				 screen->pitch, 
+				 screen->format->Rmask,
+				 screen->format->Gmask,
+				 screen->format->Bmask,
+				 screen->format->Amask);
+  
+  SDL_BlitSurface(img, 0, screen, 0);
+  SDL_Flip(screen);
+
+  SDL_FreeSurface(screen);
+  SDL_FreeSurface(img);
+  SDL_Delay(10000);
 
   return 0;
 }
@@ -164,18 +186,19 @@ void convertFrame2RGB(u8 * rgb_buf)
   static struct RGB rgb2;
   int indexYuv;
   int indexRgb;
+  u8 * pixel_p = (u8*)buffers[0].start;
 
-  for(i=0;i<FRAME_SIZE/2;i++){
+  for(i=0;i<buffers[0].length / 4 - 4;i++){
     indexYuv = i*4;
     indexRgb = i*6;
 
-    rgb1 = YUV444toRGB(*(u8*)buffers[0].start + indexYuv,
-		       *(u8*)buffers[0].start + indexYuv + 1,
-		       *(u8*)buffers[0].start + indexYuv + 3);
+    rgb1 = YUV444toRGB(pixel_p[indexYuv + 0],
+		       pixel_p[indexYuv + 1],
+		       pixel_p[indexYuv + 3]);
 
-    rgb2 = YUV444toRGB(*(u8*)buffers[0].start + indexYuv + 2,
-		       *(u8*)buffers[0].start + indexYuv + 1,
-		       *(u8*)buffers[0].start + indexYuv + 3);
+    rgb2 = YUV444toRGB(pixel_p[indexYuv + 2],
+		       pixel_p[indexYuv + 1],
+		       pixel_p[indexYuv + 3]);
 
     rgb_buf[indexRgb+0] = rgb1.R;
     rgb_buf[indexRgb+1] = rgb1.G;
@@ -204,9 +227,9 @@ struct RGB YUV444toRGB(u8 y, u8 u, u8 v)
   b = u - 128;
   c = v - 128;
 
-  rgb.R = clamp((298*a + 409*c + 128) >> 8);
+  rgb.B = clamp((298*a + 409*c + 128) >> 8);
   rgb.G = clamp((298*a - 100*b - 208*c + 128) >> 8);
-  rgb.B = clamp((298*a + 516*b + 128) >> 8);
+  rgb.R = clamp((298*a + 516*b + 128) >> 8);
 
   return rgb;
 }
